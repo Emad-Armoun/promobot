@@ -1,8 +1,10 @@
 -- SQLite
 -- SELECT * from role
 
--- SELECT count(*) from candidate
+-- SELECT count(*) from teammate
 
--- SELECT * from responsible LEFT OUTER JOIN role ON role.id = responsible.roleId
+SELECT * from teammate
 
-SELECT candidate.name, candidate.lastName, responsible.* from responsible LEFT OUTER JOIN candidate ON candidate.id = responsible.candidateId
+-- SELECT * from supervisor LEFT OUTER JOIN role ON role.id = supervisor.roleId
+
+-- SELECT teammate.name, teammate.lastName, supervisor.* from supervisor LEFT OUTER JOIN teammate ON teammate.id = supervisor.teammateId

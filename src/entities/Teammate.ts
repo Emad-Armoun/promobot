@@ -1,10 +1,10 @@
 import { Entity, Column, PrimaryGeneratedColumn, OneToMany } from "typeorm";
-import { Responsible } from "./Responsible";
+import { Supervisor } from "./Supervisor";
 
 @Entity()
-export class Candidate {
+export class Teammate {
   constructor() {
-    this.name = "";
+    this.firstName = "";
     this.isActive = true;
     this.creationDate = Date.now() / 1;
   }
@@ -21,7 +21,7 @@ export class Candidate {
   @Column({
     length: 100,
   })
-  name: string;
+  firstName: string;
 
   @Column({
     length: 120,
@@ -30,10 +30,21 @@ export class Candidate {
   lastName?: string;
 
   @Column({
-    length: 50,
+    length: 120,
     nullable: true,
   })
-  userName?: string;
+  displayName?: string;
+
+  @Column({
+    length: 20,
+  })
+  slackMemberId: string;
+
+  @Column({
+    length: 200,
+    nullable: true,
+  })
+  avatarUrl?: string;
 
   @Column({})
   isActive: boolean;
@@ -44,6 +55,6 @@ export class Candidate {
   @Column({ nullable: true })
   editionDate: number;
 
-  @OneToMany(() => Responsible, (responsible) => responsible.candidate)
-  responsibles!: Responsible[];
+  @OneToMany(() => Supervisor, (supervisor) => supervisor.teammate)
+  supervisors!: Supervisor[];
 }

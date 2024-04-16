@@ -1,22 +1,17 @@
 import { configs } from "../configs";
 import { logsConstants } from "../constants/logs";
-import { CandidateServiceType } from "../types/CandidateService";
 import { Context } from "../types/Context";
-import { ResponsibleServiceType } from "../types/ResponsibleService";
 import { intents } from "../types/intents";
 import { areDatesInSameWeek, getFormattedDate } from "../util/dateHelpers";
 import { getRandomFaceEmoji, getRandomIconEmoji } from "../util/emojiHelpers";
 import { elogRed } from "../util/logHelper";
 import { saveRotatingCircleGif } from "./rouletteWheelService";
+import { TeammateService } from "../services/TeammateService";
+import { SupervisorService } from "../services/SupervisorService";
+import { toPascalCase } from "../util/stringHelpers";
 
 export class ConversationService {
-  static run = async (
-    text: string,
-    context: Context,
-    witService: any,
-    candidateService: CandidateServiceType,
-    responsibleService: ResponsibleServiceType
-  ) => {
+  static run = async (text: string, context: Context, witService: any) => {
     if (!context.conversation) {
       context.conversation = {
         entities: {},
@@ -37,7 +32,7 @@ export class ConversationService {
     }
 
     const entities = await witService.query(text);
-    // elog("new entities = ", entities);
+    // elog("New entities from WIT = ", entities);
     context.conversation.entities = {
       ...context.conversation.entities,
       ...entities,
@@ -46,26 +41,18 @@ export class ConversationService {
     switch (context.conversation.entities.intent) {
       case intents.bye:
         return this.intentBye(context);
-      case intents.select_random_responsible:
-        return this.intentSelectResponsible(
-          context,
-          candidateService,
-          responsibleService
-        );
+      case intents.select_random_supervisor:
+        return this.intentSelectSupervisor(context);
       case intents.greeting:
         return this.intentGreeting(context);
-      case intents.ask_candidates:
-        return this.intentAskCandidates(context, candidateService);
-      case intents.add_new_candidate:
-        return this.intentAddNewCandidate(context, candidateService);
-      case intents.add_new_responsible:
-        return this.intentAddNewResponsible(
-          context,
-          candidateService,
-          responsibleService
-        );
-      case intents.ask_last_three_responsibles:
-        return this.intentAskLastThreeResponsibles(context, responsibleService);
+      case intents.ask_teammates:
+        return this.intentAskTeammates(context);
+      case intents.add_new_user_as_teammate:
+        return this.intentAddNewUserAsTeammate(context);
+      case intents.add_new_supervisor:
+        return this.intentAddNewSupervisor(context);
+      case intents.ask_last_three_supervisors:
+        return this.intentAskLastThreeSupervisors(context);
       default:
         return this.noPredefinedIntent(context);
     }
@@ -80,11 +67,7 @@ export class ConversationService {
     return context;
   };
 
-  static intentSelectResponsible = async (
-    context: Context,
-    candidateService: CandidateServiceType,
-    responsibleService: ResponsibleServiceType
-  ) => {
+  static intentSelectSupervisor = async (context: Context) => {
     const { conversation } = context;
     if (!conversation) return;
 
@@ -103,47 +86,54 @@ export class ConversationService {
       return context;
     }
 
-    const activeCandidates = await candidateService.readActiveCandidates();
+    const activeTeammates = await TeammateService.readActiveTeammates();
 
-    const lastThreeResponsibles =
-      await responsibleService.getLastThreeResponsible(neededRole, 3);
+    const lastThreeSupervisors = await SupervisorService.getLastSupervisors(
+      neededRole,
+      3
+    );
 
-    const allCandidatesExceptLastThree = activeCandidates.filter((candidate) =>
-      lastThreeResponsibles.every(
-        (responsible) => responsible.candidate.id !== candidate.id
+    const allTeammatesExceptLastThree = activeTeammates.filter((teammate) =>
+      lastThreeSupervisors.every(
+        (supervisor) => supervisor.teammate.id !== teammate.id
       )
     );
 
-    allCandidatesExceptLastThree.sort(() => Math.random() - 0.5);
-    const randomizedCandidateNames = allCandidatesExceptLastThree.map(
-      (candidate) => candidate.name
+    allTeammatesExceptLastThree.sort(() => Math.random() - 0.5);
+    const randomizedTeammateNames = allTeammatesExceptLastThree.map(
+      (teammate) => teammate.firstName
     );
-    const gifFileName = saveRotatingCircleGif(randomizedCandidateNames);
-    const selectedResponsible = allCandidatesExceptLastThree[0];
+    const gifFileName = saveRotatingCircleGif(randomizedTeammateNames);
+    const selectedSupervisor = allTeammatesExceptLastThree[0];
 
     conversation.followUp =
-      "Okay, I randomized the list of candidates as follow:\n" +
-      allCandidatesExceptLastThree
-        .map((c, i) => (i + 1).toString() + ". " + c.name)
+      "Okay, I randomized the list of teammates as follow:\n" +
+      allTeammatesExceptLastThree
+        .map((c, i) => (i + 1).toString() + ". " + c.firstName)
         .join("\n") +
-      "\n\nCongrats `" +
-      selectedResponsible.name +
-      "` " +
+      "\n\nCongrats " +
+      "<@" +
+      selectedSupervisor.slackMemberId +
+      "> (`" +
+      selectedSupervisor.firstName +
+      " " +
+      selectedSupervisor.lastName +
+      "`) " +
       getRandomFaceEmoji() +
       "\nNow you are the new `" +
-      neededRole +
+      toPascalCase(neededRole) +
       "` " +
       getRandomIconEmoji();
     conversation.followUpFileName = gifFileName;
 
-    responsibleService.addResponsibleIfExists(
-      selectedResponsible.name,
+    SupervisorService.addSupervisorIfExists(
+      selectedSupervisor.firstName,
       neededRole
     );
 
-    context.log = logsConstants.selectRandomResponsible(
-      selectedResponsible.name,
-      neededRole
+    context.log = logsConstants.selectRandomSupervisor(
+      selectedSupervisor.firstName + " " + selectedSupervisor.lastName,
+      toPascalCase(neededRole)
     );
 
     // conversation.complete = true;
@@ -158,143 +148,143 @@ export class ConversationService {
     return context;
   };
 
-  static intentAskCandidates = async (
-    context: Context,
-    candidateService: CandidateServiceType
-  ) => {
+  static intentAskTeammates = async (context: Context) => {
     const { conversation } = context;
     if (!conversation) return;
 
-    const candidates = await candidateService.readActiveCandidates();
+    const teammates = await TeammateService.readActiveTeammates();
 
-    if (!candidates.length) {
+    if (!teammates.length) {
       conversation.followUp =
-        "Currently no candidates. You can add some. :bulb:";
+        "Currently no teammates. You can add some. :bulb:";
       return context;
     }
 
     conversation.followUp =
-      "Here is the list of candidates: :point_down:\n" +
-      candidates.map((c, i) => (i + 1).toString() + ". " + c.name).join("\n");
+      "Here is the list of teammates: :point_down:\n" +
+      teammates
+        .map((c, i) => (i + 1).toString() + ". " + c.firstName)
+        .join("\n");
     return context;
   };
 
-  static intentAddNewCandidate = async (
-    context: Context,
-    candidateService: CandidateServiceType
-  ) => {
-    const { conversation } = context;
+  static intentAddNewUserAsTeammate = async (context: Context) => {
+    const { conversation, mention } = context;
     if (!conversation) return;
 
-    const newCandidateName =
-      // conversation.entities.new_candidate;
-      conversation.entities.candidate;
-
-    if (!newCandidateName) {
+    if (!mention) {
       conversation.followUp =
-        "Sorry, I didn't catch the name of the candidate. :pensive:\nCould you please rephrase it? ";
+        "Sorry, I didn't catch the name of the teammate. :pensive:\nCould you please rephrase it? ";
       return context;
     }
 
-    const getAllCandidateNamesInStringList = async () => {
-      const allCandidates = await candidateService.readActiveCandidates();
+    const getAllTeammateNamesInStringList = async () => {
+      const allTeammates = await TeammateService.readActiveTeammates();
       return (
-        "Here is the list of all the candidates: :point_down:\n\t" +
+        "Here is the list of all the teammates: :point_down:\n\t" +
         "`" +
-        allCandidates.map((c) => c.name).join("`, `") +
+        allTeammates.map((c) => c.firstName).join("`, `") +
         "`"
       );
     };
 
     const isDuplicate =
-      (await candidateService.readCandidateByName(newCandidateName)) !== null;
+      (await TeammateService.readTeammateByFirstName(
+        mention.user.first_name!
+      )) !== null;
     if (isDuplicate) {
       conversation.followUp =
         "Sorry, `" +
-        newCandidateName +
-        "` is already in the candidates list. So no need to add it again. :no_entry_sign:\n" +
-        (await getAllCandidateNamesInStringList());
+        mention.user.first_name +
+        "` is already in the teammates list. So no need to add it again. :no_entry_sign:\n" +
+        (await getAllTeammateNamesInStringList());
       return context;
     }
 
     try {
-      const saveResult = await candidateService.addCandidate(newCandidateName);
+      await TeammateService.addTeammate(
+        mention.user.title || "",
+        mention.user.first_name || "",
+        mention.user.last_name || "",
+        mention.memberId,
+        mention.user.display_name || "",
+        mention.user.image_192 || ""
+      );
     } catch (errorMessage) {
-      elogRed("error in adding new candidate -> ", errorMessage);
+      elogRed("error in adding new teammate -> ", errorMessage);
       conversation.followUp =
         "Sorry, there were a problem with adding " +
-        newCandidateName +
-        " to the candidates list. :x:\n" +
+        mention.user.first_name +
+        " to the teammates list. :x:\n" +
         errorMessage;
       return context;
     }
+
     conversation.followUp =
       "Okay, I added `" +
-      newCandidateName +
-      "` to the candidates list. :wink:\n" +
-      (await getAllCandidateNamesInStringList());
+      mention.user.real_name +
+      "` to the teammates list. :wink:\n" +
+      (await getAllTeammateNamesInStringList());
 
-    context.log = logsConstants.addNewUser(newCandidateName);
+    context.log = logsConstants.addNewUser(mention.user.real_name!);
 
     return context;
   };
 
-  static intentAddNewResponsible = async (
-    context: Context,
-    candidateService: CandidateServiceType,
-    responsibleService: ResponsibleServiceType
-  ) => {
+  static intentAddNewSupervisor = async (context: Context) => {
     const { conversation } = context;
     if (!conversation) return;
 
-    const newResponsibleName = conversation.entities.candidate;
+    const newSupervisorName = conversation.entities.teammate;
 
-    const newResponsibleRole = conversation.entities.role;
+    const newSupervisorRole = conversation.entities.role;
 
-    if (!newResponsibleName) {
+    if (!newSupervisorName) {
       conversation.followUp =
-        "Sorry, I didn't catch the name of the responsible. :pensive:\nCould you please rephrase it?";
+        "Sorry, I didn't catch the name of the supervisor. :pensive:\nCould you please rephrase it?";
       return context;
     }
 
     try {
-      const lastResponsible = await responsibleService.getLastResponsible(
-        newResponsibleRole
+      const lastSupervisor = await SupervisorService.getLastSupervisor(
+        newSupervisorRole
       );
       if (
-        areDatesInSameWeek(new Date(lastResponsible?.creationDate), new Date())
+        areDatesInSameWeek(new Date(lastSupervisor?.creationDate), new Date())
       ) {
         conversation.followUp =
           "Sorry, you can only add one " +
-          newResponsibleRole +
+          newSupervisorRole +
           " per week :no_entry_sign:. the last " +
-          newResponsibleRole +
+          newSupervisorRole +
           " was created on " +
-          new Date(lastResponsible.creationDate).toLocaleDateString();
+          new Date(lastSupervisor.creationDate).toLocaleDateString();
         return context;
       }
 
-      const saveResult = await responsibleService.addResponsibleIfExists(
-        newResponsibleName,
-        newResponsibleRole
+      const saveResult = await SupervisorService.addSupervisorIfExists(
+        newSupervisorName,
+        newSupervisorRole
       );
     } catch (errorMessage) {
-      elogRed("error in adding new responsible -> ", errorMessage);
+      elogRed("error in adding new supervisor -> ", errorMessage);
       conversation.followUp =
         "Sorry, there were a problem with adding " +
-        newResponsibleName +
-        " to the responsible list. :x:\n" +
+        newSupervisorName +
+        " to the supervisor list. :x:\n" +
         errorMessage;
       return context;
     }
 
-    const lastThreeResponsibles =
-      await responsibleService.getLastThreeResponsible(newResponsibleRole, 3);
-    const lastThreeResponsiblesInStr = lastThreeResponsibles
+    const lastThreeSupervisors = await SupervisorService.getLastSupervisors(
+      newSupervisorRole,
+      3
+    );
+    const lastThreeSupervisorsInStr = lastThreeSupervisors
       .map(
         (r) =>
           "`" +
-          r.candidate.name +
+          r.teammate.firstName +
           " (" +
           r.role.title +
           ")\t" +
@@ -305,51 +295,47 @@ export class ConversationService {
 
     conversation.followUp =
       "Okay, I added `" +
-      newResponsibleName +
+      newSupervisorName +
       "` to the `" +
-      newResponsibleRole +
+      newSupervisorRole +
       "` list :star-struck:.\n" +
-      lastThreeResponsiblesInStr;
+      lastThreeSupervisorsInStr;
 
-    context.log = logsConstants.addNewResponsible(
-      newResponsibleName,
-      newResponsibleRole
+    context.log = logsConstants.addNewSupervisor(
+      newSupervisorName,
+      newSupervisorRole
     );
     return context;
   };
 
-  static intentAskLastThreeResponsibles = async (
-    context: Context,
-    responsibleService: ResponsibleServiceType
-  ) => {
+  static intentAskLastThreeSupervisors = async (context: Context) => {
     const { conversation } = context;
     if (!conversation) return;
 
-    const askedResponsibleRole = conversation.entities.role;
+    const askedSupervisorRole = conversation.entities.role;
 
-    if (!askedResponsibleRole) {
+    if (!askedSupervisorRole) {
       conversation.followUp =
-        "Sorry, Which role do you want to see the last persons responsible for? :thinking_face:\nCould you please rephrase it?";
+        "Sorry, Which role do you want to see the last persons supervisor for? :thinking_face:\nCould you please rephrase it?";
       return context;
     }
 
     try {
-      const lastThreeResponsibles =
-        await responsibleService.getLastThreeResponsible(
-          askedResponsibleRole,
-          3
-        );
+      const lastThreeSupervisors = await SupervisorService.getLastSupervisors(
+        askedSupervisorRole,
+        3
+      );
 
-      if (lastThreeResponsibles.length === 0) {
-        conversation.followUp = `Sorry, there is no ${askedResponsibleRole} registered yet in the list. :x:`;
+      if (lastThreeSupervisors.length === 0) {
+        conversation.followUp = `Sorry, there is no ${askedSupervisorRole} registered yet in the list. :x:`;
         return context;
       }
 
-      const lastThreeResponsiblesInStr =
-        lastThreeResponsibles
+      const lastThreeSupervisorsInStr =
+        lastThreeSupervisors
           .map(
             (r) =>
-              r.candidate.name +
+              r.teammate.firstName +
               " (" +
               r.role.title +
               ")\t" +
@@ -358,15 +344,15 @@ export class ConversationService {
           .join("`\n`") + "`";
       conversation.followUp =
         "Okay, Here are the last three " +
-        askedResponsibleRole +
+        askedSupervisorRole +
         "s: :point_down:\n`" +
-        lastThreeResponsiblesInStr;
+        lastThreeSupervisorsInStr;
       return context;
     } catch (errorMessage) {
-      elogRed("error in reading new responsibles -> ", errorMessage);
+      elogRed("error in reading new supervisors -> ", errorMessage);
       conversation.followUp =
         "Sorry, there were a problem with reading the last three " +
-        askedResponsibleRole +
+        askedSupervisorRole +
         ". :x:\n" +
         errorMessage;
       return context;

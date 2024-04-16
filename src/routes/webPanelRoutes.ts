@@ -1,22 +1,17 @@
 import express, { Request, Response } from "express";
 import { ConfigType } from "../configs";
-import { CandidateServiceType } from "../types/CandidateService";
-import { ResponsibleServiceType } from "../types/ResponsibleService";
 import { ErrorType } from "../types/Other";
 import { createOutput } from "../util/apiHelpers";
 import { sendToLogChannel } from "../services/slackServices";
 import { logsConstants } from "../constants/logs";
-import { RoleServiceType } from "../types/RoleService";
+import { TeammateService } from "../services/TeammateService";
+import { RoleService } from "../services/RoleService";
+import { SupervisorService } from "../services/SupervisorService";
 
-export const webPanelRouter = (
-  configs: ConfigType,
-  candidateService: CandidateServiceType,
-  responsibleService: ResponsibleServiceType,
-  roleService: RoleServiceType
-) => {
+export const webPanelRouter = (configs: ConfigType) => {
   const router = express.Router();
 
-  router.get("/candidates", async (_req: Request, res: Response) => {
+  router.get("/teammates", async (_req: Request, res: Response) => {
     try {
       const isActive =
         _req.query.isActive === "true"
@@ -25,104 +20,96 @@ export const webPanelRouter = (
           ? false
           : undefined;
       const searchTerm: string = _req.query.search?.toString() || "";
-      const candidates = await candidateService.searchCandidates(
+      const teammates = await TeammateService.searchTeammates(
         searchTerm,
         isActive
       );
 
-      res.json(createOutput(candidates));
+      res.json(createOutput(teammates));
     } catch (error) {
       const errorMessage = (error as ErrorType).message;
       res.status(500).json(createOutput(null, errorMessage));
     }
   });
 
-  router.get(
-    "/candidate/:candidate_id",
-    async (req: Request, res: Response) => {
-      try {
-        const candidateId = req.params.candidate_id;
-        if (!candidateId) {
-          res.status(400).json(createOutput(null, "Candidate ID is required"));
-        }
-
-        const candidate = await candidateService.readCandidateById(candidateId);
-        if (candidate) res.json(createOutput(candidate));
-        else res.status(404).json(createOutput(null, "Candidate not found"));
-      } catch (error) {
-        const errorMessage = (error as ErrorType).message;
-        res.status(500).json(createOutput(null, errorMessage));
+  router.get("/teammate/:teammate_id", async (req: Request, res: Response) => {
+    try {
+      const teammateId = req.params.teammate_id;
+      if (!teammateId) {
+        res.status(400).json(createOutput(null, "Teammate ID is required"));
       }
-    }
-  );
 
-  const validateCandidatePayload = (
+      const teammate = await TeammateService.readTeammateById(teammateId);
+      if (teammate) res.json(createOutput(teammate));
+      else res.status(404).json(createOutput(null, "Teammate not found"));
+    } catch (error) {
+      const errorMessage = (error as ErrorType).message;
+      res.status(500).json(createOutput(null, errorMessage));
+    }
+  });
+
+  const validateTeammatePayload = (
     body: any,
     checkRequired: boolean = true
   ): string | undefined => {
     const { name } = body;
     if (checkRequired && !name) {
-      return "Candidate name is required";
+      return "Teammate name is required";
     }
   };
 
-  router.put(
-    "/candidate/:candidate_id",
-    async (req: Request, res: Response) => {
-      try {
-        const candidateId = req.params.candidate_id;
-        if (!candidateId) {
-          res.status(400).json(createOutput(null, "Candidate ID is required"));
-        }
-
-        const validationError = validateCandidatePayload(req.body, false);
-        if (validationError)
-          res.status(400).json(createOutput(null, validationError));
-
-        const candidate = await candidateService.readCandidateById(candidateId);
-        if (!candidate) {
-          res.status(404).json(createOutput(null, "Candidate not found"));
-        }
-
-        const editedCandidate = { ...candidate, ...req.body };
-
-        const result = await candidateService.updateCandidate(editedCandidate);
-        if (result) {
-          res.json(
-            createOutput(editedCandidate, "Candidate updated successfully")
-          );
-          sendToLogChannel(logsConstants.updateCandidate(candidate?.name!));
-        } else res.status(500).json(createOutput(null, "Update failed"));
-      } catch (error) {
-        console.error(error);
-        const errorMessage = (error as ErrorType).message;
-        res.status(500).json(createOutput(null, errorMessage));
+  router.put("/teammate/:teammate_id", async (req: Request, res: Response) => {
+    try {
+      const teammateId = req.params.teammate_id;
+      if (!teammateId) {
+        res.status(400).json(createOutput(null, "Teammate ID is required"));
       }
+
+      const validationError = validateTeammatePayload(req.body, false);
+      if (validationError)
+        res.status(400).json(createOutput(null, validationError));
+
+      const teammate = await TeammateService.readTeammateById(teammateId);
+      if (!teammate) {
+        res.status(404).json(createOutput(null, "Teammate not found"));
+      }
+
+      const editedTeammate = { ...teammate, ...req.body };
+
+      const result = await TeammateService.updateTeammate(editedTeammate);
+      if (result) {
+        res.json(createOutput(editedTeammate, "Teammate updated successfully"));
+        sendToLogChannel(logsConstants.updateTeammate(teammate?.firstName!));
+      } else res.status(500).json(createOutput(null, "Update failed"));
+    } catch (error) {
+      console.error(error);
+      const errorMessage = (error as ErrorType).message;
+      res.status(500).json(createOutput(null, errorMessage));
     }
-  );
+  });
 
   router.put(
-    "/candidate/:candidate_id/deactivate",
+    "/teammate/:teammate_id/deactivate",
     async (req: Request, res: Response) => {
       try {
-        const candidateId = req.params.candidate_id;
-        if (!candidateId) {
-          res.status(400).json(createOutput(null, "Candidate ID is required"));
+        const teammateId = req.params.teammate_id;
+        if (!teammateId) {
+          res.status(400).json(createOutput(null, "Teammate ID is required"));
         }
 
-        const candidate = await candidateService.readCandidateById(candidateId);
-        if (!candidate) {
-          res.status(404).json(createOutput(null, "Candidate not found"));
+        const teammate = await TeammateService.readTeammateById(teammateId);
+        if (!teammate) {
+          res.status(404).json(createOutput(null, "Teammate not found"));
         }
 
-        const deactiveCandidate = await candidateService.deactivateCandidate(
-          candidate!
+        const deactiveTeammate = await TeammateService.deactivateTeammate(
+          teammate!
         );
-        if (deactiveCandidate) {
-          res.json(
-            createOutput(candidate, "Candidate deactivated successfully")
+        if (deactiveTeammate) {
+          res.json(createOutput(teammate, "Teammate deactivated successfully"));
+          sendToLogChannel(
+            logsConstants.deactivateTeammate(teammate?.firstName!)
           );
-          sendToLogChannel(logsConstants.deactivateCandidate(candidate?.name!));
         } else res.status(500).json(createOutput(null, "Deactivation failed"));
       } catch (error) {
         const errorMessage = (error as ErrorType).message;
@@ -131,20 +118,22 @@ export const webPanelRouter = (
     }
   );
 
-  router.post("/candidates", async (req: Request, res: Response) => {
+  router.post("/teammates", async (req: Request, res: Response) => {
     try {
-      const validationError = validateCandidatePayload(req.body);
+      const validationError = validateTeammatePayload(req.body);
       if (validationError)
         res.status(400).json(createOutput(null, validationError));
 
-      const candidate = await candidateService.addCandidate(
-        req.body.name,
+      const teammate = await TeammateService.addTeammate(
         req.body.title,
+        req.body.firstName,
         req.body.lastName,
-        req.body.userName
+        req.body.slackMemberId,
+        req.body.displayName,
+        req.body.avatarUrl
       );
-      res.json(createOutput(candidate));
-      sendToLogChannel(logsConstants.addNewUser(candidate?.name!, true));
+      res.json(createOutput(teammate));
+      sendToLogChannel(logsConstants.addNewUser(teammate?.firstName!, true));
     } catch (error) {
       const errorMessage = (error as ErrorType).message;
       res.status(500).json(createOutput(null, errorMessage));
@@ -153,15 +142,15 @@ export const webPanelRouter = (
 
   router.get("/roles/:role_name", async (req: Request, res: Response) => {
     try {
-      const isRoleExists = await roleService.isValidRole(req.params.role_name);
+      const isRoleExists = await RoleService.isValidRole(req.params.role_name);
       if (!isRoleExists) {
         return res.status(404).json(createOutput(null, "Role not found"));
       }
 
-      const responsibles = await responsibleService.getLastThreeResponsible(
+      const supervisors = await SupervisorService.getLastSupervisors(
         req.params.role_name
       );
-      res.json(createOutput(responsibles));
+      res.json(createOutput(supervisors));
     } catch (error) {
       const errorMessage = (error as ErrorType).message;
       res.status(500).json(createOutput(null, errorMessage));
@@ -169,32 +158,32 @@ export const webPanelRouter = (
   });
 
   router.get(
-    "/roles/:role_name/:candidate_id",
+    "/roles/:role_name/:teammate_id",
     async (req: Request, res: Response) => {
       try {
-        const isRoleExists = await roleService.isValidRole(
+        const isRoleExists = await RoleService.isValidRole(
           req.params.role_name
         );
         if (!isRoleExists) {
           return res.status(404).json(createOutput(null, "Role not found"));
         }
 
-        const candidateId = req.params.candidate_id;
-        if (!candidateId) {
-          res.status(400).json(createOutput(null, "Candidate ID is required"));
+        const teammateId = req.params.teammate_id;
+        if (!teammateId) {
+          res.status(400).json(createOutput(null, "Teammate ID is required"));
         }
 
-        const candidate = await candidateService.readCandidateById(candidateId);
-        if (!candidate) {
-          res.status(404).json(createOutput(null, "Candidate not found"));
+        const teammate = await TeammateService.readTeammateById(teammateId);
+        if (!teammate) {
+          res.status(404).json(createOutput(null, "Teammate not found"));
         }
 
-        const candidateResponsiblities =
-          await responsibleService.getCandidateResponsiblities(
-            candidateId,
+        const teammateSupervisors =
+          await SupervisorService.getTeammateSupervisors(
+            teammateId,
             req.params.role_name
           );
-        res.json(createOutput(candidateResponsiblities));
+        res.json(createOutput(teammateSupervisors));
       } catch (error) {
         const errorMessage = (error as ErrorType).message;
         res.status(500).json(createOutput(null, errorMessage));

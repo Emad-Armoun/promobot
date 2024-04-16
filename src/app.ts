@@ -7,12 +7,8 @@ import { webPanelRouter } from "./routes/webPanelRoutes";
 import { WitService } from "./services/WitServices";
 import SessionService from "./services/SessionService";
 import { Context } from "./types/Context";
-import { CandidateService } from "./services/CandidateService";
-import { ResponsibleService } from "./services/ResponsibleService";
-import { GeneralServices } from "./services/GeneralServices";
 import cors from "cors";
 import setupSwagger from "./util/setup_swagger";
-import { RoleService } from "./services/RoleService";
 import { generalRouter } from "./routes/generalRouter";
 import { elog } from "./util/logHelper";
 import { nowDate, nowTime } from "./util/dateHelpers";
@@ -49,29 +45,17 @@ const witService = WitService(configs.wit.toekn!);
 const sessionService = SessionService<Context>();
 
 // SlackBot api endpoints
-app.use(
-  "/api/slackbot",
-  slackRouter(
-    configs,
-    witService,
-    sessionService,
-    CandidateService,
-    ResponsibleService
-  )
-);
+app.use("/api/slackbot", slackRouter(configs, witService, sessionService));
 
 // Add a json parser middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
 // Web Panel api endpoints
-app.use(
-  "/api/webpanel",
-  webPanelRouter(configs, CandidateService, ResponsibleService, RoleService)
-);
+app.use("/api/webpanel", webPanelRouter(configs));
 
 // General api endpoints
-app.use("/api", generalRouter(GeneralServices));
+app.use("/api", generalRouter());
 
 // a basic api endpoint for test
 app.get("/api/hi", (req: Request, res: Response) => {

@@ -1,18 +1,18 @@
 import express, { Request, Response } from "express";
 import { getFormattedDate } from "../util/dateHelpers";
-import { GeneralServiceType } from "../types/GeneralServiceType";
+import { GeneralServices } from "../services/GeneralServices";
 
-export const generalRouter = (generalServices: GeneralServiceType) => {
+export const generalRouter = () => {
   const router = express.Router();
 
   // Version api
-  router.get("/version", (req: Request, res: Response) => {
+  router.get("/version", (_req: Request, res: Response) => {
     const currentVersion = require("../../package.json").version;
     res.send("v." + currentVersion.toString());
   });
 
   router.get("/clear", async (_req: Request, res: Response) => {
-    const result = await generalServices.clearAll();
+    const result = await GeneralServices.clearAll();
     if (result === true) {
       res.send(
         "All of the current data are removed at (" +
@@ -24,14 +24,14 @@ export const generalRouter = (generalServices: GeneralServiceType) => {
     }
   });
 
-  router.get("/init", async (req: Request, res: Response) => {
-    const clearResult = await generalServices.clearAll();
+  router.get("/init", async (_req: Request, res: Response) => {
+    const clearResult = await GeneralServices.clearAll();
     if (clearResult !== true) {
       res.send("Error in removing the data: " + clearResult);
       return;
     }
 
-    const initResult = await generalServices.initializeRoles();
+    const initResult = await GeneralServices.initializeRoles();
     if (initResult !== true) {
       res.send("Error in initializing the data: " + initResult);
       return;
@@ -45,13 +45,13 @@ export const generalRouter = (generalServices: GeneralServiceType) => {
   });
 
   router.get("/init_roles", async (_req: Request, res: Response) => {
-    const clearResult = await generalServices.clearAll();
+    const clearResult = await GeneralServices.clearAll();
     if (clearResult !== true) {
       res.send("Error in removing the data: " + clearResult);
       return;
     }
 
-    const initTestResult = await generalServices.initializeRoles();
+    const initTestResult = await GeneralServices.initializeRoles();
     if (initTestResult !== true) {
       res.send("Error in initializing the test data: " + initTestResult);
       return;
@@ -62,14 +62,14 @@ export const generalRouter = (generalServices: GeneralServiceType) => {
     }
   });
 
-  router.get("/init_candidates", async (_req: Request, res: Response) => {
-    const clearResult = await generalServices.clearAll();
+  router.get("/init_teammates", async (_req: Request, res: Response) => {
+    const clearResult = await GeneralServices.clearAll();
     if (clearResult !== true) {
       res.send("Error in removing the data: " + clearResult);
       return;
     }
 
-    const initTestResult = await generalServices.initializeCandidates();
+    const initTestResult = await GeneralServices.initializeTeammates();
     if (initTestResult !== true) {
       res.send("Error in initializing the test data: " + initTestResult);
       return;

@@ -9,18 +9,18 @@ import { Session } from "../types/Session";
 import { MentionEvent } from "../types/Slack";
 import { Context } from "../types/Context";
 import { ConversationService } from "./ConversationService";
-import { CandidateServiceType } from "../types/CandidateService";
-import { ResponsibleServiceType } from "../types/ResponsibleService";
 import { configs } from "../configs";
 import { elogRed } from "../util/logHelper";
+import {
+  replaceMiddleMentions,
+  replaceStartMentions,
+} from "../util/mentionHelpers";
 
 export const handleMention = async (
   event: MentionEvent,
   witService: any,
   slackWebClient: WebClient,
-  sessionService: any,
-  candidateService: CandidateServiceType,
-  responsibleService: ResponsibleServiceType
+  sessionService: any
 ) => {
   const senderInfo = await getUserInfo(slackWebClient, event.user);
 
@@ -45,23 +45,14 @@ export const handleMention = async (
     };
   }
 
-  processSlackEvent(
-    event,
-    witService,
-    slackWebClient,
-    session,
-    candidateService,
-    responsibleService
-  );
+  processSlackEvent(event, witService, slackWebClient, session);
 };
 
 export const handleMessage = async (
   event: MentionEvent,
   witService: any,
   slackWebClient: WebClient,
-  sessionService: any,
-  candidateService: CandidateServiceType,
-  responsibleService: ResponsibleServiceType
+  sessionService: any
 ) => {
   const sessionId = createSessionId(
     event.channel,
@@ -71,33 +62,39 @@ export const handleMessage = async (
   let session: Session<Context> = sessionService.get(sessionId);
 
   if (!session) return false;
-  processSlackEvent(
-    event,
-    witService,
-    slackWebClient,
-    session,
-    candidateService,
-    responsibleService
-  );
+  processSlackEvent(event, witService, slackWebClient, session);
 };
 
 const processSlackEvent = async (
   event: MentionEvent,
   witService: any,
   slackWebClient: WebClient,
-  session: Session<Context>,
-  candidateService: CandidateServiceType,
-  responsibleService: ResponsibleServiceType
+  session: Session<Context>
 ) => {
-  const mention = /<@[A-Z0-9]+>/;
-  const eventText = event.text.replace(mention, "").trim();
+  let eventText = event.text.trim();
+
+  // If the text is started with a mention, then it should be removed
+  eventText = replaceStartMentions(eventText);
+
+  // If there is a mention in between the text, it should be extracted and then replaced with "John Doe"
+  const replaceResult = replaceMiddleMentions(eventText);
+  eventText = replaceResult.text;
+
+  const mentionedUser =
+    replaceResult.mentionedMemberId &&
+    (await getUserInfo(slackWebClient, replaceResult.mentionedMemberId));
+  // elog("mentionedUser = ", mentionedUser);
+  if (mentionedUser) {
+    session.context.mention = {
+      user: mentionedUser,
+      memberId: replaceResult.mentionedMemberId!,
+    };
+  }
 
   const context = await ConversationService.run(
     eventText,
     session.context,
-    witService,
-    candidateService,
-    responsibleService
+    witService
   );
   let answer = "";
   let answerFileName;
